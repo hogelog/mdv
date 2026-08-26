@@ -274,7 +274,11 @@ async fn index(State(state): State<AppState>) -> Html<String> {
         &format!(
             r#"<div class="home-shell">
 <header class="home-header"><a class="brand" href="/"><span class="brand-mark">M↓</span><span><strong>mdv</strong><small>Local Markdown Viewer</small></span></a><span class="status"><i></i> daemon :{}</span></header>
-<main class="home-main"><section class="hero"><p>Pass a local file to <code>mdv</code>.</p><pre><code>mdv path/to/file.md</code></pre></section>
+<main class="home-main"><section class="hero"><p>Pass a local file to <code>mdv</code>.</p><pre><code>mdv README.md          # start the daemon if needed and open the file
+mdv                    # open the recently-viewed page
+mdv --start            # explicitly start the daemon
+mdv --stop             # stop it
+mdv --start --port 9000</code></pre></section>
 <section class="recent-section"><div class="section-heading"><div><p class="eyebrow">Library</p><h2>Recently opened</h2></div><span>Up to 30 files</span></div><ul class="recent">{list}</ul></section></main>
 <footer class="home-footer"><span>mdv 0.1.0</span><a href="https://github.com/hogelog/mdv">GitHub</a><span>Data: {}</span><span>Bound to 127.0.0.1</span></footer></div>"#,
             state.port,
