@@ -1,8 +1,7 @@
 # mdv
 
-A small local Markdown viewer. The CLI is defined with
-[`usage-rs`](https://usage.jdx.dev/rust/), and a background daemon serves files
-only on `127.0.0.1`.
+A small local Markdown viewer. A background daemon serves files only on
+`127.0.0.1`.
 
 ## Install
 
