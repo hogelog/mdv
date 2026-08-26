@@ -500,7 +500,7 @@ fn file_url(port: u16, path: &Path) -> String {
 
 fn page(title: &str, body: &str) -> String {
     format!(
-        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{}</title><style>
+        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{}</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2328'/%3E%3Ctext x='32' y='41' text-anchor='middle' fill='white' font-family='monospace' font-size='25' font-weight='700'%3EM%E2%86%93%3C/text%3E%3C/svg%3E"><style>
 :root {{ color-scheme:light dark; --bg:#fff; --fg:#1f2328; --muted:#656d76; --border:#d1d9e0; --accent:#0969da; --code-bg:#f6f8fa; --quote-bg:#f6f8fa; --th-bg:#f6f8fa; --pre-bg:#1f2328; --pre-fg:#e6edf3; --strong:#0a3069 }}
 @media(prefers-color-scheme:dark) {{ :root{{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--border:#30363d;--accent:#4493f8;--code-bg:#161b22;--quote-bg:#161b22;--th-bg:#161b22;--pre-bg:#010409;--pre-fg:#e6edf3;--strong:#a5d6ff}} }}
 *{{box-sizing:border-box}} html{{scroll-behavior:smooth}} body{{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Segoe UI",sans-serif;font-size:15px;line-height:1.75}}
@@ -552,5 +552,12 @@ mod tests {
         assert!(body.contains("<h2 id=\"全体の流れ\">全体の流れ</h2>"));
         assert!(toc.contains("href=\"#全体の流れ\""));
         assert!(toc.contains("class=\"toc-level-3\""));
+    }
+
+    #[test]
+    fn page_includes_data_uri_favicon() {
+        let output = page("Test", "<main>Test</main>");
+        assert!(output.contains("rel=\"icon\""));
+        assert!(output.contains("data:image/svg+xml"));
     }
 }
