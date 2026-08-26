@@ -16,28 +16,90 @@ use std::{
     process::{Command, Stdio},
     time::Duration,
 };
-use usage::Cli;
-
 const DAEMON_ENV: &str = "MDV_DAEMON";
+const HELP: &str = "View local Markdown files in your browser.\n\nUsage: mdv [OPTIONS] [FILE]\n\nOptions:\n      --start        Start the background server\n      --stop         Stop the background server\n  -p, --port PORT    Port for the local server [default: 8088]\n  -h, --help         Print help\n  -V, --version      Print version";
 
-/// View local Markdown files in your browser.
-#[derive(Cli, Debug)]
-#[usage(bin = "mdv", version)]
+#[derive(Debug, PartialEq)]
 struct Args {
-    /// Start the background server.
-    #[usage(long)]
     start: bool,
-
-    /// Stop the background server.
-    #[usage(long)]
     stop: bool,
-
-    /// Port for the local server.
-    #[usage(long, short = 'p', default = "8088")]
     port: u16,
-
-    /// Markdown file to open.
     file: Option<PathBuf>,
+}
+
+impl Args {
+    fn parse() -> Result<Self, String> {
+        let mut arguments = std::env::args_os();
+        arguments.next();
+        Self::parse_from(arguments)
+    }
+
+    fn parse_from(arguments: impl IntoIterator<Item = std::ffi::OsString>) -> Result<Self, String> {
+        let mut args = Self {
+            start: false,
+            stop: false,
+            port: 8088,
+            file: None,
+        };
+        let mut arguments = arguments.into_iter();
+        let mut positional_only = false;
+
+        while let Some(argument) = arguments.next() {
+            if !positional_only {
+                match argument.to_str() {
+                    Some("--start") => {
+                        args.start = true;
+                        continue;
+                    }
+                    Some("--stop") => {
+                        args.stop = true;
+                        continue;
+                    }
+                    Some("-p" | "--port") => {
+                        let value = arguments
+                            .next()
+                            .ok_or_else(|| format!("{argument:?} requires a port"))?;
+                        args.port = parse_port(&value)?;
+                        continue;
+                    }
+                    Some("-h" | "--help") => {
+                        println!("{HELP}");
+                        std::process::exit(0);
+                    }
+                    Some("-V" | "--version") => {
+                        println!("mdv {}", env!("CARGO_PKG_VERSION"));
+                        std::process::exit(0);
+                    }
+                    Some("--") => {
+                        positional_only = true;
+                        continue;
+                    }
+                    Some(value) if value.starts_with("--port=") => {
+                        args.port = value[7..]
+                            .parse()
+                            .map_err(|_| format!("invalid port: {}", &value[7..]))?;
+                        continue;
+                    }
+                    Some(value) if value.starts_with('-') => {
+                        return Err(format!("unknown option: {value}"));
+                    }
+                    _ => {}
+                }
+            }
+
+            if args.file.replace(PathBuf::from(argument)).is_some() {
+                return Err("only one Markdown file can be specified".into());
+            }
+        }
+        Ok(args)
+    }
+}
+
+fn parse_port(value: &std::ffi::OsStr) -> Result<u16, String> {
+    value
+        .to_str()
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(|| format!("invalid port: {}", value.to_string_lossy()))
 }
 
 #[derive(Clone)]
@@ -60,7 +122,7 @@ async fn main() {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+    let args = Args::parse().map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     if args.start && args.stop {
         return Err("--start and --stop cannot be used together".into());
     }
@@ -516,6 +578,35 @@ main{{flex:1 1 auto;min-width:0;max-width:900px;margin:0 auto;padding:32px 24px 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    fn parse_args(arguments: &[&str]) -> Result<Args, String> {
+        Args::parse_from(arguments.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn parses_cli_options_and_file() {
+        assert_eq!(
+            parse_args(&["--start", "--port=9000"]).unwrap(),
+            Args {
+                start: true,
+                stop: false,
+                port: 9000,
+                file: None,
+            }
+        );
+        assert_eq!(
+            parse_args(&["-p", "3000", "README.md"]).unwrap().file,
+            Some(PathBuf::from("README.md"))
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_cli_arguments() {
+        assert!(parse_args(&["--port", "invalid"]).is_err());
+        assert!(parse_args(&["--unknown"]).is_err());
+        assert!(parse_args(&["one.md", "two.md"]).is_err());
+    }
 
     #[test]
     fn url_encodes_spaces() {
