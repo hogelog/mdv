@@ -247,7 +247,7 @@ async fn index(State(state): State<AppState>) -> Html<String> {
             continue;
         }
         let path = entry.path.to_string_lossy();
-        let href = format!("/{}", encode_path(&path));
+        let href = path_href(&path);
         list.push_str(&format!(
             "<li><a href=\"{}\"><strong>{}</strong><small>{}</small></a></li>",
             href,
@@ -360,11 +360,15 @@ fn encode_path(path: &str) -> String {
         .join("/")
 }
 
+fn path_href(path: &str) -> String {
+    format!("/{}", encode_path(path.trim_start_matches('/')))
+}
+
 fn file_url(port: u16, path: &Path) -> String {
     format!(
-        "http://localhost:{}/{}",
+        "http://localhost:{}{}",
         port,
-        encode_path(path.to_string_lossy().trim_start_matches('/'))
+        path_href(&path.to_string_lossy())
     )
 }
 
@@ -386,6 +390,11 @@ mod tests {
     #[test]
     fn url_encodes_spaces() {
         assert_eq!(encode_path("Users/me/a b.md"), "Users/me/a%20b%2Emd");
+    }
+
+    #[test]
+    fn absolute_path_href_has_one_leading_slash() {
+        assert_eq!(path_href("/Users/me/a b.md"), "/Users/me/a%20b%2Emd");
     }
 
     #[test]
