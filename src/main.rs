@@ -5,7 +5,6 @@ use axum::{
     routing::get,
     Router,
 };
-use chrono::{DateTime, Utc};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use pulldown_cmark::{html, Options, Parser};
 use serde::{Deserialize, Serialize};
@@ -50,7 +49,6 @@ struct AppState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct HistoryEntry {
     path: PathBuf,
-    opened_at: DateTime<Utc>,
 }
 
 #[tokio::main]
@@ -467,7 +465,6 @@ fn add_history(config_dir: &Path, path: &Path) -> io::Result<()> {
         0,
         HistoryEntry {
             path: path.to_owned(),
-            opened_at: Utc::now(),
         },
     );
     entries.truncate(30);
