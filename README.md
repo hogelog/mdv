@@ -3,6 +3,8 @@
 A small local Markdown viewer. A background daemon serves files only on
 `127.0.0.1`.
 
+![mdv displaying a Markdown file](assets/screenshot.png)
+
 ## Install
 
 ```sh

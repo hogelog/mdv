@@ -353,6 +353,25 @@ async fn markdown(AxumPath(raw): AxumPath<String>, State(state): State<AppState>
         Err(_) => return error_page(StatusCode::BAD_REQUEST, "Invalid path"),
     };
     let path = PathBuf::from(format!("/{decoded}"));
+    if let Some(content_type) = image_content_type(&path) {
+        let path = match fs::canonicalize(&path) {
+            Ok(path) if path.is_file() => path,
+            Ok(_) => return error_page(StatusCode::NOT_FOUND, "not a file"),
+            Err(error) => return error_page(StatusCode::NOT_FOUND, &error.to_string()),
+        };
+        return match fs::read(path) {
+            Ok(bytes) => (
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (header::CONTENT_SECURITY_POLICY, "sandbox"),
+                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                ],
+                bytes,
+            )
+                .into_response(),
+            Err(error) => error_page(StatusCode::INTERNAL_SERVER_ERROR, &error.to_string()),
+        };
+    }
     let path = match canonical_markdown(&path) {
         Ok(path) => path,
         Err(error) => return error_page(StatusCode::NOT_FOUND, &error.to_string()),
@@ -374,6 +393,19 @@ async fn markdown(AxumPath(raw): AxumPath<String>, State(state): State<AppState>
         ),
     ))
     .into_response()
+}
+
+fn image_content_type(path: &Path) -> Option<&'static str> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "apng" => Some("image/apng"),
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" | "jfif" | "pjpeg" | "pjp" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "svg" => Some("image/svg+xml"),
+        "webp" => Some("image/webp"),
+        "avif" => Some("image/avif"),
+        _ => None,
+    }
 }
 
 fn render_markdown(source: &str) -> (String, String) {
@@ -642,6 +674,27 @@ mod tests {
         assert!(toc.contains("class=\"toc-level-1\""));
         assert!(toc.contains("class=\"toc-level-2\""));
         assert!(toc.contains("class=\"toc-level-3\""));
+    }
+
+    #[test]
+    fn recognizes_supported_image_types() {
+        assert_eq!(
+            image_content_type(Path::new("image.PNG")),
+            Some("image/png")
+        );
+        assert_eq!(
+            image_content_type(Path::new("photo.jpeg")),
+            Some("image/jpeg")
+        );
+        assert_eq!(
+            image_content_type(Path::new("diagram.svg")),
+            Some("image/svg+xml")
+        );
+        assert_eq!(
+            image_content_type(Path::new("animation.apng")),
+            Some("image/apng")
+        );
+        assert_eq!(image_content_type(Path::new("document.pdf")), None);
     }
 
     #[test]
