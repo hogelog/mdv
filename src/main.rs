@@ -409,8 +409,14 @@ fn image_content_type(path: &Path) -> Option<&'static str> {
 }
 
 fn render_markdown(source: &str) -> (String, String) {
+    use pulldown_cmark::Event;
+
     let mut rendered = String::new();
-    html::push_html(&mut rendered, Parser::new_ext(source, Options::all()));
+    let parser = Parser::new_ext(source, Options::all()).map(|event| match event {
+        Event::Html(source) | Event::InlineHtml(source) => Event::Text(source),
+        event => event,
+    });
+    html::push_html(&mut rendered, parser);
 
     let headings = collect_headings(source);
     let mut body = rendered;
@@ -674,6 +680,17 @@ mod tests {
         assert!(toc.contains("class=\"toc-level-1\""));
         assert!(toc.contains("class=\"toc-level-2\""));
         assert!(toc.contains("class=\"toc-level-3\""));
+    }
+
+    #[test]
+    fn markdown_escapes_raw_html() {
+        let (body, _) = render_markdown(
+            "<script>alert('xss')</script>\n\n<span onclick=\"alert('xss')\">text</span>",
+        );
+        assert!(!body.contains("<script>"));
+        assert!(!body.contains("<span"));
+        assert!(body.contains("&lt;script&gt;"));
+        assert!(body.contains("&lt;span onclick=\"alert('xss')\"&gt;"));
     }
 
     #[test]
