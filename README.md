@@ -7,6 +7,14 @@ A small local Markdown viewer. A background daemon serves files only on
 
 ## Install
 
+With Homebrew:
+
+```sh
+brew install hogelog/tap/mdv
+```
+
+From source:
+
 ```sh
 cargo install --path .
 ```
