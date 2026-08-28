@@ -1,6 +1,7 @@
 use axum::{
-    extract::{Path as AxumPath, State},
-    http::{header, StatusCode},
+    extract::{Path as AxumPath, Request, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::get,
     Router,
@@ -275,8 +276,10 @@ async fn serve(port: u16, config_dir: PathBuf) -> Result<(), Box<dyn std::error:
     };
     let app = Router::new()
         .route("/", get(index))
+        .route("/assets/style.css", get(stylesheet))
         .route("/{*path}", get(markdown))
-        .with_state(state);
+        .with_state(state)
+        .layer(middleware::from_fn(security_headers));
     println!("mdv daemon listening at http://localhost:{port}");
     let result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -300,6 +303,39 @@ async fn shutdown_signal() {
         }
     }
     let _ = tokio::signal::ctrl_c().await;
+}
+
+async fn security_headers(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    apply_security_headers(response.headers_mut());
+    response
+}
+
+fn apply_security_headers(headers: &mut HeaderMap) {
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(
+            "default-src 'none'; style-src 'self'; img-src 'self' data:; script-src 'none'; \
+             frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; \
+             form-action 'none'; connect-src 'none'; font-src 'none'",
+        ),
+    );
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+}
+
+async fn stylesheet() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("../assets/style.css"),
+    )
 }
 
 async fn index(State(state): State<AppState>) -> Html<String> {
@@ -597,18 +633,8 @@ fn file_url(port: u16, path: &Path) -> String {
 
 fn page(title: &str, body: &str) -> String {
     format!(
-        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{}</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2328'/%3E%3Ctext x='32' y='41' text-anchor='middle' fill='white' font-family='monospace' font-size='25' font-weight='700'%3EM%E2%86%93%3C/text%3E%3C/svg%3E"><style>
-:root {{ color-scheme:light dark; --bg:#fff; --fg:#1f2328; --muted:#656d76; --border:#d1d9e0; --accent:#0969da; --code-bg:#f6f8fa; --quote-bg:#f6f8fa; --th-bg:#f6f8fa; --pre-bg:#1f2328; --pre-fg:#e6edf3; --strong:#0a3069 }}
-@media(prefers-color-scheme:dark) {{ :root{{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--border:#30363d;--accent:#4493f8;--code-bg:#161b22;--quote-bg:#161b22;--th-bg:#161b22;--pre-bg:#010409;--pre-fg:#e6edf3;--strong:#a5d6ff}} }}
-*{{box-sizing:border-box}} html{{scroll-behavior:smooth}} body{{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Segoe UI",sans-serif;font-size:15px;line-height:1.75}}
-.wrap{{display:flex;max-width:1280px;margin:0 auto;gap:32px}} nav.toc{{flex:0 0 260px;position:sticky;top:44px;align-self:flex-start;max-height:calc(100vh - 44px);overflow-y:auto;padding:32px 0 32px 20px;font-size:13px;line-height:1.5}} nav.toc>.toctitle{{font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11px;margin-bottom:10px}} nav.toc ul{{list-style:none;margin:0;padding:0}} nav.toc li{{margin:3px 0}} nav.toc .toc-level-1{{font-weight:600}} nav.toc .toc-level-2{{padding-left:12px}} nav.toc .toc-level-3{{padding-left:24px;font-size:12px}} nav.toc a{{color:var(--muted);text-decoration:none;display:block;padding:2px 6px;border-left:2px solid transparent;border-radius:0 4px 4px 0}} nav.toc a:hover{{color:var(--accent);border-left-color:var(--accent);background:var(--code-bg)}} .toc-empty{{color:var(--muted)}}
-.document-header{{height:44px;display:flex;align-items:center;gap:10px;padding:0 max(20px,calc(50vw - 620px));border-bottom:1px solid color-mix(in srgb,var(--border) 65%,transparent);background:color-mix(in srgb,var(--bg) 94%,transparent);position:sticky;top:0;z-index:10;backdrop-filter:blur(12px)}} .document-brand{{flex:none;color:var(--muted);font-size:12px;font-weight:600;text-decoration:none;letter-spacing:-.01em}} .document-brand:hover{{color:var(--fg)}} .document-brand::after{{content:"/";margin-left:10px;color:color-mix(in srgb,var(--muted) 45%,transparent);font-weight:400}} .document-path{{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--muted) 82%,transparent);font:11px ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace}}
-main{{flex:1 1 auto;min-width:0;max-width:900px;margin:0 auto;padding:32px 24px 96px}} h1{{font-size:28px;line-height:1.4;margin:0 0 8px;padding-bottom:12px;border-bottom:1px solid var(--border);letter-spacing:-.01em}} h2{{font-size:21px;margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);letter-spacing:-.01em}} h3{{font-size:17px;margin:28px 0 10px}} p{{margin:12px 0}} a{{color:var(--accent)}} strong{{color:var(--strong);font-weight:600}} code{{background:var(--code-bg);padding:.15em .4em;border-radius:5px;font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;font-size:.875em;word-break:break-word}} pre{{background:var(--pre-bg);color:var(--pre-fg);padding:16px 18px;border-radius:8px;overflow-x:auto;line-height:1.5;font-size:12.5px}} pre code{{background:none;padding:0;color:inherit;font-size:inherit;white-space:pre}} blockquote{{margin:16px 0;padding:12px 16px;background:var(--quote-bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;color:var(--fg)}} blockquote p{{margin:4px 0}} table{{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px;display:block;overflow-x:auto}} th,td{{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top}} th{{background:var(--th-bg);font-weight:600;white-space:nowrap}} tbody tr:nth-child(even){{background:color-mix(in srgb,var(--code-bg) 55%,transparent)}} ul,ol{{padding-left:24px;margin:12px 0}} li{{margin:5px 0}} input[type=checkbox]{{margin-right:8px;accent-color:var(--accent)}} hr{{border:0;border-top:1px solid var(--border);margin:32px 0}} img{{max-width:100%}}
-.recent{{list-style:none;padding:0}} .recent li{{border-bottom:1px solid var(--border)}} .recent a{{display:flex;flex-direction:column;padding:14px 4px;text-decoration:none}} .recent small{{color:var(--muted);overflow-wrap:anywhere}} .empty{{color:var(--muted);padding:20px 4px}}
-.home-shell{{max-width:1040px;margin:0 auto;padding:0 28px}} .home-header{{height:76px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}} .brand{{display:flex;align-items:center;gap:12px;color:var(--fg);text-decoration:none}} .brand-mark{{display:grid;place-items:center;width:38px;height:38px;border-radius:9px;background:var(--fg);color:var(--bg);font:700 15px ui-monospace,SFMono-Regular,monospace}} .brand strong{{display:block;color:var(--fg);font-size:18px;line-height:1.15;letter-spacing:-.02em}} .brand small{{display:block;color:var(--muted);font-size:11px;line-height:1.4}} .home-main{{max-width:none;padding:64px 0 80px}} .hero{{max-width:680px}} .eyebrow{{margin:0 0 8px;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}} .hero h1{{font-size:38px;border:0;padding:0;margin:0 0 16px;letter-spacing:-.035em}} .hero>p:not(.eyebrow){{max-width:620px;color:var(--muted);font-size:16px}} .hero pre{{display:inline-block;margin:18px 0 0;padding:12px 16px}} .recent-section{{margin-top:72px}} .section-heading{{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:10px}} .section-heading h2{{border:0;margin:0;padding:0;font-size:21px}} .section-heading>span{{color:var(--muted);font-size:12px}} .recent{{margin:0}} .recent a{{padding:16px 4px}} .recent strong{{color:var(--fg)}} .recent a:hover strong{{color:var(--accent)}} .home-footer{{display:flex;gap:24px;flex-wrap:wrap;padding:18px 0 32px;border-top:1px solid var(--border);color:var(--muted);font:11px ui-monospace,SFMono-Regular,monospace}} .home-footer a{{color:inherit;text-decoration:none}} .home-footer a:hover{{color:var(--accent);text-decoration:underline}}
-@media(max-width:900px){{.wrap{{display:block}}nav.toc{{position:static;max-height:none;padding:24px 24px 18px;flex:none;border-bottom:1px solid var(--border)}}main{{padding:24px 20px 64px}}}}
-@media(max-width:600px){{.home-shell{{padding:0 20px}}.home-header{{height:68px}}.brand small{{display:none}}.status{{font-size:11px}}.home-main{{padding:44px 0 64px}}.hero h1{{font-size:31px}}.recent-section{{margin-top:52px}}.home-footer{{gap:10px;flex-direction:column}}}}
-</style></head><body>{body}</body></html>"#,
+        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{}</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2328'/%3E%3Ctext x='32' y='41' text-anchor='middle' fill='white' font-family='monospace' font-size='25' font-weight='700'%3EM%E2%86%93%3C/text%3E%3C/svg%3E"><link rel="stylesheet" href="/assets/style.css">
+</head><body>{body}</body></html>"#,
         html_escape::encode_text(title)
     )
 }
@@ -719,5 +745,20 @@ mod tests {
         let output = page("Test", "<main>Test</main>");
         assert!(output.contains("rel=\"icon\""));
         assert!(output.contains("data:image/svg+xml"));
+        assert!(output.contains("href=\"/assets/style.css\""));
+        assert!(!output.contains("<style>"));
+    }
+
+    #[test]
+    fn applies_security_headers() {
+        let mut headers = HeaderMap::new();
+        apply_security_headers(&mut headers);
+        let policy = headers[header::CONTENT_SECURITY_POLICY].to_str().unwrap();
+        assert!(policy.contains("default-src 'none'"));
+        assert!(policy.contains("style-src 'self'"));
+        assert!(policy.contains("script-src 'none'"));
+        assert_eq!(headers[header::REFERRER_POLICY], "no-referrer");
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(headers[header::CACHE_CONTROL], "no-store");
     }
 }
