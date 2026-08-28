@@ -21,12 +21,17 @@ mdv --stop             # stop it
 mdv --start --port 9000
 ```
 
-The default URL is <http://localhost:8088/>. Absolute Markdown paths are mapped
-directly to URLs, for example:
+The default URL is <http://localhost:8088/>. Markdown files explicitly opened
+through the CLI are mapped to absolute URLs, for example:
 
 ```text
 http://localhost:8088/Users/me/project/README.md
 ```
 
-History and daemon metadata are stored in `~/.config/mdv`, or in
-`$XDG_CONFIG_HOME/mdv` when `XDG_CONFIG_HOME` is set.
+Other Markdown files are not served until they have been opened through the
+CLI. Images below an opened document's directory are available so that relative
+image references continue to work. Raw HTML in Markdown is displayed as text,
+and responses use a restrictive Content Security Policy.
+
+History, authorized file paths, and daemon metadata are stored in
+`~/.config/mdv`, or in `$XDG_CONFIG_HOME/mdv` when `XDG_CONFIG_HOME` is set.

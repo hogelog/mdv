@@ -152,6 +152,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         Some(path) => {
             let path = canonical_markdown(&path)?;
             ensure_daemon(args.port, &config_dir)?;
+            authorize_markdown(&config_dir, &path)?;
             add_history(&config_dir, &path)?;
             let url = file_url(args.port, &path);
             open::that(&url)?;
@@ -395,6 +396,9 @@ async fn markdown(AxumPath(raw): AxumPath<String>, State(state): State<AppState>
             Ok(_) => return error_page(StatusCode::NOT_FOUND, "not a file"),
             Err(error) => return error_page(StatusCode::NOT_FOUND, &error.to_string()),
         };
+        if !is_authorized_image(&state.config_dir, &path) {
+            return error_page(StatusCode::FORBIDDEN, "image was not opened by mdv");
+        }
         return match fs::read(path) {
             Ok(bytes) => (
                 [
@@ -412,11 +416,13 @@ async fn markdown(AxumPath(raw): AxumPath<String>, State(state): State<AppState>
         Ok(path) => path,
         Err(error) => return error_page(StatusCode::NOT_FOUND, &error.to_string()),
     };
+    if !is_authorized_markdown(&state.config_dir, &path) {
+        return error_page(StatusCode::FORBIDDEN, "file was not opened by mdv");
+    }
     let source = match fs::read_to_string(&path) {
         Ok(source) => source,
         Err(error) => return error_page(StatusCode::INTERNAL_SERVER_ERROR, &error.to_string()),
     };
-    let _ = add_history(&state.config_dir, &path);
     let (body, toc) = render_markdown(&source);
     let title = path.file_name().unwrap_or_default().to_string_lossy();
     let display_path = path.to_string_lossy();
@@ -586,6 +592,49 @@ fn history_path(config_dir: &Path) -> PathBuf {
     config_dir.join("history.json")
 }
 
+fn authorized_path(config_dir: &Path) -> PathBuf {
+    config_dir.join("authorized.json")
+}
+
+fn read_authorized(config_dir: &Path) -> io::Result<Vec<HistoryEntry>> {
+    match fs::read(authorized_path(config_dir)) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(io::Error::other),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(error),
+    }
+}
+
+fn authorize_markdown(config_dir: &Path, path: &Path) -> io::Result<()> {
+    let mut entries = read_authorized(config_dir).unwrap_or_default();
+    if entries.iter().any(|entry| entry.path == path) {
+        return Ok(());
+    }
+    entries.push(HistoryEntry {
+        path: path.to_owned(),
+    });
+    let temporary = config_dir.join("authorized.json.tmp");
+    fs::write(
+        &temporary,
+        serde_json::to_vec_pretty(&entries).map_err(io::Error::other)?,
+    )?;
+    fs::rename(temporary, authorized_path(config_dir))
+}
+
+fn is_authorized_markdown(config_dir: &Path, path: &Path) -> bool {
+    read_authorized(config_dir)
+        .unwrap_or_default()
+        .iter()
+        .any(|entry| entry.path == path)
+}
+
+fn is_authorized_image(config_dir: &Path, path: &Path) -> bool {
+    read_authorized(config_dir)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|entry| entry.path.parent())
+        .any(|directory| path.starts_with(directory))
+}
+
 fn read_history(config_dir: &Path) -> io::Result<Vec<HistoryEntry>> {
     match fs::read(history_path(config_dir)) {
         Ok(bytes) => serde_json::from_slice(&bytes).map_err(io::Error::other),
@@ -695,6 +744,42 @@ mod tests {
         let entries = read_history(dir.path()).unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].path, one);
+    }
+
+    #[test]
+    fn only_explicitly_opened_markdown_is_authorized() {
+        let dir = tempfile::tempdir().unwrap();
+        let opened = dir.path().join("opened.md");
+        let other = dir.path().join("other.md");
+        fs::write(&opened, "opened").unwrap();
+        fs::write(&other, "other").unwrap();
+        let opened = fs::canonicalize(opened).unwrap();
+        let other = fs::canonicalize(other).unwrap();
+
+        authorize_markdown(dir.path(), &opened).unwrap();
+
+        assert!(is_authorized_markdown(dir.path(), &opened));
+        assert!(!is_authorized_markdown(dir.path(), &other));
+    }
+
+    #[test]
+    fn images_below_an_authorized_markdown_directory_are_authorized() {
+        let dir = tempfile::tempdir().unwrap();
+        let document = dir.path().join("document.md");
+        let assets = dir.path().join("assets");
+        fs::create_dir(&assets).unwrap();
+        let image = assets.join("image.png");
+        fs::write(&document, "![image](assets/image.png)").unwrap();
+        fs::write(&image, "image").unwrap();
+        let document = fs::canonicalize(document).unwrap();
+        let image = fs::canonicalize(image).unwrap();
+
+        authorize_markdown(dir.path(), &document).unwrap();
+
+        assert!(is_authorized_image(dir.path(), &image));
+
+        let outside = tempfile::NamedTempFile::with_suffix(".png").unwrap();
+        assert!(!is_authorized_image(dir.path(), outside.path()));
     }
 
     #[test]
