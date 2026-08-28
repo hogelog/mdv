@@ -28,6 +28,9 @@ through the CLI are mapped to absolute URLs, for example:
 http://localhost:8088/Users/me/project/README.md
 ```
 
+If the requested port is already in use, mdv automatically tries each following
+port until one is available (for example, `8088`, then `8089`).
+
 Other Markdown files are not served until they have been opened through the
 CLI. Images below an opened document's directory are available so that relative
 image references continue to work. Raw HTML in Markdown is displayed as text,

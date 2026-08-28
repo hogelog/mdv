@@ -143,24 +143,24 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if args.start {
-        ensure_daemon(args.port, &config_dir)?;
-        println!("mdv daemon listening at http://localhost:{}", args.port);
+        let port = ensure_daemon(args.port, &config_dir)?;
+        println!("mdv daemon listening at http://localhost:{port}");
         return Ok(());
     }
 
     match args.file {
         Some(path) => {
             let path = canonical_markdown(&path)?;
-            ensure_daemon(args.port, &config_dir)?;
+            let port = ensure_daemon(args.port, &config_dir)?;
             authorize_markdown(&config_dir, &path)?;
             add_history(&config_dir, &path)?;
-            let url = file_url(args.port, &path);
+            let url = file_url(port, &path);
             open::that(&url)?;
             println!("{url}");
         }
         None => {
-            ensure_daemon(args.port, &config_dir)?;
-            let url = format!("http://localhost:{}", args.port);
+            let port = ensure_daemon(args.port, &config_dir)?;
+            let url = format!("http://localhost:{port}");
             open::that(&url)?;
             println!("{url}");
         }
@@ -192,20 +192,17 @@ fn daemon_alive(port: u16) -> bool {
     .is_ok()
 }
 
-fn ensure_daemon(port: u16, config_dir: &Path) -> io::Result<()> {
-    if daemon_alive(port) {
-        return Ok(());
-    }
+fn ensure_daemon(port: u16, config_dir: &Path) -> io::Result<u16> {
     if let Ok(other_port) = fs::read_to_string(port_path(config_dir)) {
         if let Ok(other_port) = other_port.trim().parse::<u16>() {
             if daemon_alive(other_port) {
-                return Err(io::Error::new(
-                    io::ErrorKind::AddrInUse,
-                    format!("mdv daemon is already running on port {other_port}"),
-                ));
+                return Ok(other_port);
             }
         }
     }
+
+    // Avoid mistaking stale metadata for the newly spawned daemon.
+    let _ = fs::remove_file(port_path(config_dir));
 
     let executable = std::env::current_exe()?;
     Command::new(executable)
@@ -219,8 +216,12 @@ fn ensure_daemon(port: u16, config_dir: &Path) -> io::Result<()> {
 
     for _ in 0..30 {
         std::thread::sleep(Duration::from_millis(50));
-        if daemon_alive(port) {
-            return Ok(());
+        if let Ok(actual_port) = fs::read_to_string(port_path(config_dir)) {
+            if let Ok(actual_port) = actual_port.trim().parse::<u16>() {
+                if daemon_alive(actual_port) {
+                    return Ok(actual_port);
+                }
+            }
         }
     }
     Err(io::Error::new(
@@ -267,7 +268,7 @@ fn stop_daemon(config_dir: &Path) -> io::Result<()> {
 }
 
 async fn serve(port: u16, config_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
+    let (listener, port) = bind_available_listener(port).await?;
     fs::write(pid_path(&config_dir), std::process::id().to_string())?;
     fs::write(port_path(&config_dir), port.to_string())?;
 
@@ -289,6 +290,24 @@ async fn serve(port: u16, config_dir: PathBuf) -> Result<(), Box<dyn std::error:
     let _ = fs::remove_file(port_path(&config_dir));
     result?;
     Ok(())
+}
+
+async fn bind_available_listener(start_port: u16) -> io::Result<(tokio::net::TcpListener, u16)> {
+    for port in start_port..=u16::MAX {
+        match tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await {
+            Ok(listener) => {
+                let actual_port = listener.local_addr()?.port();
+                return Ok((listener, actual_port));
+            }
+            Err(error) if error.kind() == io::ErrorKind::AddrInUse => continue,
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::AddrInUse,
+        format!("no available port at or above {start_port}"),
+    ))
 }
 
 async fn shutdown_signal() {
@@ -719,6 +738,23 @@ mod tests {
         assert!(parse_args(&["--port", "invalid"]).is_err());
         assert!(parse_args(&["--unknown"]).is_err());
         assert!(parse_args(&["one.md", "two.md"]).is_err());
+    }
+
+    #[tokio::test]
+    async fn uses_next_port_when_requested_port_is_in_use() {
+        let occupied = match tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await {
+            Ok(listener) => listener,
+            // Some sandboxed test environments prohibit opening any socket.
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("failed to bind test listener: {error}"),
+        };
+        let occupied_port = occupied.local_addr().unwrap().port();
+        if occupied_port == u16::MAX {
+            return;
+        }
+
+        let (_listener, actual_port) = bind_available_listener(occupied_port).await.unwrap();
+        assert!(actual_port > occupied_port);
     }
 
     #[test]
