@@ -20,8 +20,20 @@ module MDV
   def self.config_dir
     root = ENV["XDG_CONFIG_HOME"] || File.join(Dir.home, ".config")
     path = File.join(root, "mdv")
-    Dir.mkdir(path) unless Dir.exist?(path)
+    mkdir_p(path)
     path
+  end
+
+  def self.mkdir_p(path)
+    missing = []
+    current = path
+    until Dir.exist?(current)
+      missing << current
+      parent = File.dirname(current)
+      raise "cannot create directory: #{path}" if parent == current
+      current = parent
+    end
+    missing.reverse_each { |directory| Dir.mkdir(directory) unless Dir.exist?(directory) }
   end
 
   def self.port_file = File.join(config_dir, "daemon.port")
