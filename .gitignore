@@ -1,2 +1,7 @@
-/target
+/build
 .DS_Store
+.test-config
+
+/vendor/cmark-gfm/build
+/vendor/cmark-gfm/src/cmark-gfm_export.h
+/vendor/cmark-gfm/src/cmark-gfm_version.h
