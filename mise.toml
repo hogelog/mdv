@@ -1,0 +1,24 @@
+[tools]
+cmake = "3.31.6"
+
+[tasks.cmark]
+run = """
+  cmake -S vendor/cmark-gfm -B vendor/cmark-gfm/build -DBUILD_SHARED_LIBS=OFF -DCMARK_TESTS=OFF -DCMARK_SHARED=OFF
+  cmake --build vendor/cmark-gfm/build
+"""
+description = "Build the vendored cmark-gfm static libraries"
+
+[tasks.build]
+depends = ["cmark"]
+run = "spin build"
+description = "Build mdv"
+
+[tasks.test]
+depends = ["cmark"]
+run = "spin test"
+description = "Run tests"
+
+[tasks.install]
+depends = ["cmark"]
+run = "spin install"
+description = "Install mdv"

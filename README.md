@@ -1,22 +1,24 @@
 # mdv
 
-A small local Markdown viewer. A background daemon serves files only on
-`127.0.0.1`.
+A small local Markdown viewer, compiled from Ruby with [Spinel](https://github.com/matz/spinel). A background daemon serves files only on `127.0.0.1`.
 
 ![mdv displaying a Markdown file](assets/screenshot.png)
 
 ## Install
 
-With Homebrew:
+From source (with Spinel installed):
 
 ```sh
-brew install hogelog/tap/mdv
+git submodule update --init --recursive
+mise install
+mise run install
 ```
 
-From source:
+For development:
 
 ```sh
-cargo install --path .
+mise run build
+mise run test
 ```
 
 ## Use
@@ -29,20 +31,14 @@ mdv --stop             # stop it
 mdv --start --port 9000
 ```
 
-The default URL is <http://localhost:8088/>. Markdown files explicitly opened
-through the CLI are mapped to absolute URLs, for example:
+The default URL is <http://localhost:8088/>. Markdown files explicitly opened through the CLI are mapped to absolute URLs, for example:
 
 ```text
 http://localhost:8088/Users/me/project/README.md
 ```
 
-If the requested port is already in use, mdv automatically tries each following
-port until one is available (for example, `8088`, then `8089`).
+If the requested port is already in use, mdv automatically tries each following port (for example, `8088`, then `8089`).
 
-Other Markdown files are not served until they have been opened through the
-CLI. Images below an opened document's directory are available so that relative
-image references continue to work. Raw HTML in Markdown is displayed as text,
-and responses use a restrictive Content Security Policy.
+Other Markdown files are not served until they have been opened through the CLI. Images below an opened document's directory are available so that relative image references continue to work. Raw HTML is sanitized, and responses use a restrictive Content Security Policy.
 
-History, authorized file paths, and daemon metadata are stored in
-`~/.config/mdv`, or in `$XDG_CONFIG_HOME/mdv` when `XDG_CONFIG_HOME` is set.
+History, authorized file paths, and daemon metadata are stored in `~/.config/mdv`, or in `$XDG_CONFIG_HOME/mdv` when `XDG_CONFIG_HOME` is set.
