@@ -1,6 +1,6 @@
 # mdv
 
-A Ruby gem for viewing local Markdown files. It uses the well-tested `commonmarker` library for CommonMark/GitHub Flavored Markdown rendering; the background daemon serves files only on `127.0.0.1`.
+A Ruby gem for viewing local Markdown files. The background daemon serves files only on `127.0.0.1`.
 
 ![mdv displaying a Markdown file](assets/screenshot.png)
 
