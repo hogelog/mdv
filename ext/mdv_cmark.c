@@ -1,7 +1,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../vendor/cmark-gfm/src/cmark-gfm.h"
+typedef struct cmark_parser cmark_parser;
+typedef struct cmark_node cmark_node;
+typedef struct cmark_llist cmark_llist;
+
+#define CMARK_OPT_SAFE (1 << 3)
+
+cmark_parser *cmark_parser_new(int options);
+void cmark_parser_feed(cmark_parser *parser, const char *buffer, size_t len);
+cmark_node *cmark_parser_finish(cmark_parser *parser);
+void cmark_parser_free(cmark_parser *parser);
+void cmark_node_free(cmark_node *node);
+char *cmark_render_html(cmark_node *root, int options, cmark_llist *extensions);
 
 typedef struct cmark_syntax_extension cmark_syntax_extension;
 void cmark_gfm_core_extensions_ensure_registered(void);
